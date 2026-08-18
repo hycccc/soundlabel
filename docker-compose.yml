@@ -1,0 +1,18 @@
+# Single-operator deployment: one box, one volume, one human.
+#
+#   docker compose run label demo            # tour the framework
+#   docker compose run label roster add ivy --profile "folk, ballad"
+#   docker compose run label produce ivy
+#   docker compose run label produce ivy --llm   # needs ANTHROPIC_API_KEY in .env
+#   docker compose run label catalog
+services:
+  label:
+    build: .
+    volumes:
+      - label-data:/label
+    environment:
+      # only needed for --llm agents; harmless when empty
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+volumes:
+  label-data:

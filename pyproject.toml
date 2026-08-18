@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soundlabel"
-version = "0.1.0"
+version = "0.2.0"
 description = "Open-source framework for running an AI music label: catalog, scoring stack, agent loop, pluggable generation backends"
 readme = "README.md"
 license = { text = "MIT" }
@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 scoring = ["songscore @ git+https://github.com/hycccc/songscore.git"]
+llm = ["anthropic>=0.60"]
 dev = ["pytest>=7"]
 
 [project.scripts]

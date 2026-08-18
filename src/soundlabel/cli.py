@@ -45,9 +45,17 @@ def cmd_roster(args) -> None:
 
 
 def cmd_produce(args) -> None:
+    anr = critic = None
+    if args.llm:
+        try:
+            from .agents.llm import LLMANRAgent, LLMCriticAgent
+        except ImportError as exc:
+            sys.exit(str(exc))
+        anr, critic = LLMANRAgent(), LLMCriticAgent()
     try:
         result = run_batch(_workspace(args), args.artist,
-                           backend=args.backend, allow_paid=args.allow_paid)
+                           backend=args.backend, allow_paid=args.allow_paid,
+                           anr_agent=anr, critic_agent=critic)
     except (KeyError, PaidBackendRefused) as exc:
         sys.exit(str(exc))
     _print_batch(result)
@@ -118,6 +126,9 @@ def main(argv: list[str] | None = None) -> None:
     produce.add_argument("--backend", default="mock")
     produce.add_argument("--allow-paid", action="store_true",
                          help="permit a backend with a nonzero cost estimate")
+    produce.add_argument("--llm", action="store_true",
+                         help="use LLM-backed A&R and Critic agents (spends API "
+                              "tokens; needs ANTHROPIC_API_KEY and soundlabel[llm])")
 
     sub.add_parser("catalog", help="list released tracks")
 

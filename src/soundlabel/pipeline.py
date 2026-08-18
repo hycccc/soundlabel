@@ -48,6 +48,8 @@ def run_batch(
     backend: str | GenerationBackend = "mock",
     brief: Brief | None = None,
     allow_paid: bool = False,
+    anr_agent=None,
+    critic_agent=None,
 ) -> BatchResult:
     workspace = Path(workspace)
     catalog = Catalog(workspace / "catalog.db")
@@ -64,7 +66,7 @@ def run_batch(
 
     # -- brief -------------------------------------------------------------
     if brief is None:
-        brief = ANRAgent().write_brief(artist, catalog.history(artist_slug))
+        brief = (anr_agent or ANRAgent()).write_brief(artist, catalog.history(artist_slug))
     _step(manifest, "brief", started, brief=json.loads(brief.to_json()))
     catalog.open_batch(batch_id, artist_slug, be.name, brief.to_json())
 
@@ -109,7 +111,7 @@ def run_batch(
           gate_reasons=report.gate_reasons, rank=report.rank_score, scorer=report.scorer)
 
     # -- critic (blind) ----------------------------------------------------
-    verdict = CriticAgent().review(result.audio_path, report, brief.blind())
+    verdict = (critic_agent or CriticAgent()).review(result.audio_path, report, brief.blind())
     _step(manifest, "critic", started, **asdict(verdict))
 
     # -- catalog -----------------------------------------------------------

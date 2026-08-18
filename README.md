@@ -97,19 +97,38 @@ class MyBackend(GenerationBackend):
 register("mine", MyBackend)
 ```
 
+## LLM agents (M4b — opt-in)
+
+`pip install "soundlabel[llm]"`, set `ANTHROPIC_API_KEY`, and add `--llm` to `produce`. The heuristic A&R and Critic are swapped for Claude-backed agents with **identical interfaces** — the Critic still receives a `BlindBrief`, so blindness survives the intelligence upgrade. Nothing selects these agents by default; token spend is opt-in per run, same philosophy as `--allow-paid`.
+
+What a blind LLM Critic verdict looks like on a real run (the "3AM laundromat" theme is from the LLM A&R's own brief; the Critic saw only intent + measurements):
+
+> *redo — Intent-fit failure is concentrated in one measurable, fixable dimension: spectral balance. A 6629 Hz centroid is extremely bright for a brief that explicitly asks for "hushed... quietly aching but warm" … Dynamics are the keeper: crest 19.6 dB scoring a full 1.000 means nothing has been crushed — that is the hardest thing to recover once lost. Do not touch the compression on the next pass. … Two corrective mix moves — low-mid restoration plus ambience widening — plausibly move this into release territory without rewriting a note. That is a redo, not a kill.*
+
+## Deploy (M5)
+
+```bash
+docker compose run label demo
+docker compose run label roster add ivy --profile "folk, ballad"
+docker compose run label produce ivy
+docker compose run label catalog
+```
+
+One box, one volume (`label-data` holds the catalog and batches), one human. `ANTHROPIC_API_KEY` in `.env` enables `--llm`.
+
 ## Roadmap
 
 - [x] **M0** — architecture, principles, roadmap
 - [x] **M1** — core data model + scoring integration: SQLite catalog, gate → rank stack, songscore auto-upgrade
 - [x] **M3** — generation backend interface + mock provider + registry (`--allow-paid` cost guard)
 - [x] **M4a** — the agent loop, heuristic edition: A&R brief (anti-rut, respects rejects) → generation → blind Critic verdict → release/redo/kill, with per-batch manifests
-- [ ] **M4b** — LLM-backed A&R and Critic agents on the [claude-oncall](https://github.com/hycccc/claude-oncall) sidecar pattern (same interfaces, opt-in cost)
+- [x] **M4b** — LLM-backed A&R and Critic agents: same interfaces, structurally blind, opt-in cost (`--llm`)
+- [x] **M5** — single-operator deployment recipe (Dockerfile + docker compose, one box, one human)
 - [ ] **M2** — listening room: LiveKit room orchestration, synced playback, live scoring UI
-- [ ] **M5** — single-operator deployment recipe (docker compose, one box, one human)
 
 ## Status
 
-M1/M3/M4a shipped and CI-tested; the loop runs end to end with zero API keys. Architecture extracted from a production system I've run since 2026; remaining milestones land as each layer is decoupled and sanitized. Open an issue if one matters to you.
+M1/M3/M4/M5 shipped and CI-tested; the loop runs end to end with zero API keys, and upgrades to LLM agents with one flag. Architecture extracted from a production system I've run since 2026. M2 (the listening room) is the last milestone — open an issue if it matters to you.
 
 ## License
 
