@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soundlabel"
+version = "0.1.0"
+description = "Open-source framework for running an AI music label: catalog, scoring stack, agent loop, pluggable generation backends"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Yuchen Hu" }]
+dependencies = [
+    "numpy>=1.24",
+    "soundfile>=0.12",
+]
+
+[project.optional-dependencies]
+scoring = ["songscore @ git+https://github.com/hycccc/songscore.git"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+soundlabel = "soundlabel.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
