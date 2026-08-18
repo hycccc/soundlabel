@@ -105,6 +105,18 @@ What a blind LLM Critic verdict looks like on a real run (the "3AM laundromat" t
 
 > *redo — Intent-fit failure is concentrated in one measurable, fixable dimension: spectral balance. A 6629 Hz centroid is extremely bright for a brief that explicitly asks for "hushed... quietly aching but warm" … Dynamics are the keeper: crest 19.6 dB scoring a full 1.000 means nothing has been crushed — that is the hardest thing to recover once lost. Do not touch the compression on the next pass. … Two corrective mix moves — low-mid restoration plus ambience widening — plausibly move this into release territory without rewriting a note. That is a redo, not a kill.*
 
+## Listening room (M2 — opt-in)
+
+`pip install "soundlabel[rooms]"`, point `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` at any LiveKit server (self-hosted or cloud — bring your own, same as generation backends), and:
+
+```bash
+soundlabel room open release-night
+soundlabel room token release-night yuchen --host      # host: publishes audio, drives playback
+soundlabel room token release-night listener-1         # listener: hears + scores
+```
+
+Serve [`room/listen.html`](room/listen.html) (the reference client) and hand out tokens. The host plays a candidate file; it streams to every listener from the same playhead; listeners score 1-10 over the data channel. **The role split lives in the token, not in client-side goodwill** — listener tokens cannot publish audio, and there is a test for that. The sync/scoring wire protocol is four small JSON messages, documented in [`rooms.py`](src/soundlabel/rooms.py).
+
 ## Deploy (M5)
 
 ```bash
@@ -124,11 +136,11 @@ One box, one volume (`label-data` holds the catalog and batches), one human. `AN
 - [x] **M4a** — the agent loop, heuristic edition: A&R brief (anti-rut, respects rejects) → generation → blind Critic verdict → release/redo/kill, with per-batch manifests
 - [x] **M4b** — LLM-backed A&R and Critic agents: same interfaces, structurally blind, opt-in cost (`--llm`)
 - [x] **M5** — single-operator deployment recipe (Dockerfile + docker compose, one box, one human)
-- [ ] **M2** — listening room: LiveKit room orchestration, synced playback, live scoring UI
+- [x] **M2** — listening room: LiveKit room orchestration, role-split tokens, synced playback + live scoring reference client
 
 ## Status
 
-M1/M3/M4/M5 shipped and CI-tested; the loop runs end to end with zero API keys, and upgrades to LLM agents with one flag. Architecture extracted from a production system I've run since 2026. M2 (the listening room) is the last milestone — open an issue if it matters to you.
+**All milestones shipped.** The loop runs end to end with zero API keys, upgrades to LLM agents with one flag, streams to a listening room with one more, and deploys with docker compose. Architecture extracted from a production system I've run since 2026. Issues and adapters welcome.
 
 ## License
 

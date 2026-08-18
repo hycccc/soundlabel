@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>soundlabel · listening room</title>
+<script src="https://unpkg.com/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background:#1a1a19; color:#e8e6e1; font: 15px/1.5 ui-monospace, Menlo, monospace; padding: 32px; max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 4px; } h1 span { color:#1fa88c; }
+  .sub { color:#8a877f; margin-bottom: 24px; }
+  fieldset { border: 1px solid #2e2e2c; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  legend { color:#8a877f; padding: 0 8px; }
+  label { display:block; color:#8a877f; font-size: 12px; margin: 8px 0 2px; }
+  input, button { font: inherit; }
+  input[type=text], input[type=password] { width: 100%; background:#222220; color:#e8e6e1; border:1px solid #3a3a37; border-radius: 8px; padding: 8px 10px; }
+  button { background:#1fa88c; color:#0e2d27; border:0; border-radius: 8px; padding: 8px 16px; cursor:pointer; font-weight: 600; margin: 8px 8px 0 0; }
+  button.alt { background:#2e2e2c; color:#e8e6e1; }
+  button:disabled { opacity:.4; cursor:default; }
+  #log { color:#8a877f; font-size: 12px; white-space: pre-wrap; max-height: 180px; overflow-y: auto; margin-top: 12px; }
+  .scores button { background:#2e2e2c; color:#e8e6e1; width: 40px; padding: 8px 0; }
+  .scores button:hover { background:#1fa88c; color:#0e2d27; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<h1>soundlabel<span>_</span> listening room</h1>
+<p class="sub">reference client — synced listening + live scoring over LiveKit</p>
+
+<fieldset>
+  <legend>join</legend>
+  <label>LiveKit URL (wss://…)</label><input id="url" type="text" placeholder="wss://your-livekit-host">
+  <label>token (mint with: soundlabel room token …)</label><input id="token" type="password">
+  <button id="join">join room</button>
+</fieldset>
+
+<fieldset id="host-panel" class="hidden">
+  <legend>host — play a candidate to the room</legend>
+  <input id="file" type="file" accept="audio/*">
+  <audio id="player" controls style="width:100%; margin-top:8px"></audio>
+</fieldset>
+
+<fieldset id="listener-panel" class="hidden">
+  <legend>score the current track</legend>
+  <div class="scores" id="scores"></div>
+  <label>comment (optional)</label><input id="comment" type="text">
+</fieldset>
+
+<div id="log"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const log = (m) => { $("log").textContent += m + "\n"; $("log").scrollTop = 1e9; };
+let room, isHost = false;
+
+$("join").onclick = async () => {
+  const { Room, RoomEvent, LocalAudioTrack } = LivekitClient;
+  room = new Room();
+  try {
+    await room.connect($("url").value.trim(), $("token").value.trim());
+  } catch (e) { log("connect failed: " + e.message); return; }
+  // the token decides the role: hosts were minted with can_publish
+  isHost = room.localParticipant.permissions?.canPublish;
+  log(`joined "${room.name}" as ${room.localParticipant.identity} (${isHost ? "host" : "listener"})`);
+  $(isHost ? "host-panel" : "listener-panel").classList.remove("hidden");
+  $("join").disabled = true;
+
+  room.on(RoomEvent.TrackSubscribed, (track) => {
+    if (track.kind === "audio") { track.attach(); log("listening to the host's stream"); }
+  });
+  room.on(RoomEvent.DataReceived, (payload, participant) => {
+    const msg = JSON.parse(new TextDecoder().decode(payload));
+    if (msg.type === "score") log(`score from ${participant?.identity}: ${msg.score}/10 ${msg.comment || ""}`);
+    else log(`${msg.type} from ${participant?.identity}`);
+  });
+
+  if (isHost) {
+    $("file").onchange = async () => {
+      const url = URL.createObjectURL($("file").files[0]);
+      const player = $("player");
+      player.src = url;
+      await player.play();
+      const stream = player.captureStream ? player.captureStream() : player.mozCaptureStream();
+      const [audioTrack] = stream.getAudioTracks();
+      await room.localParticipant.publishTrack(new LocalAudioTrack(audioTrack));
+      log("publishing to the room — everyone hears the same playhead");
+    };
+  } else {
+    for (let i = 1; i <= 10; i++) {
+      const b = document.createElement("button");
+      b.textContent = i;
+      b.onclick = () => {
+        const msg = { type: "score", score: i, comment: $("comment").value,
+                      identity: room.localParticipant.identity };
+        room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(msg)),
+                                          { reliable: true, topic: "soundlabel" });
+        log(`sent ${i}/10`);
+        $("comment").value = "";
+      };
+      $("scores").appendChild(b);
+    }
+  }
+};
+</script>
+</body>
+</html>

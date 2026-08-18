@@ -73,6 +73,26 @@ def cmd_catalog(args) -> None:
     catalog.close()
 
 
+def cmd_room(args) -> None:
+    import asyncio
+    try:
+        from . import rooms
+        config = rooms.RoomConfig.from_env()
+        if args.room_cmd == "token":
+            print(rooms.mint_token(config, args.room, args.identity, host=args.host))
+        elif args.room_cmd == "open":
+            asyncio.run(rooms.open_room(config, args.room))
+            print(f"room {args.room!r} open — serve room/listen.html and share tokens")
+        elif args.room_cmd == "close":
+            asyncio.run(rooms.close_room(config, args.room))
+            print(f"room {args.room!r} closed")
+        else:
+            for r in asyncio.run(rooms.list_rooms(config)):
+                print(f"{r.name:24s} participants={r.num_participants}")
+    except (ImportError, RuntimeError) as exc:
+        sys.exit(str(exc))
+
+
 def cmd_demo(args) -> None:
     ws = Path(args.workspace)
     catalog = Catalog(ws / "catalog.db")
@@ -132,12 +152,25 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("catalog", help="list released tracks")
 
+    roomp = sub.add_parser("room", help="listening rooms (LiveKit)")
+    rsub2 = roomp.add_subparsers(dest="room_cmd", required=True)
+    rtoken = rsub2.add_parser("token", help="mint a join token (offline)")
+    rtoken.add_argument("room")
+    rtoken.add_argument("identity")
+    rtoken.add_argument("--host", action="store_true",
+                        help="host role: can publish audio and drive playback")
+    ropen = rsub2.add_parser("open", help="create the room on the server")
+    ropen.add_argument("room")
+    rclose = rsub2.add_parser("close", help="delete the room on the server")
+    rclose.add_argument("room")
+    rsub2.add_parser("list", help="list active rooms")
+
     demo = sub.add_parser("demo", help="end-to-end tour with a demo artist")
     demo.add_argument("--tracks", type=int, default=3)
 
     args = p.parse_args(argv)
     {"init": cmd_init, "roster": cmd_roster, "produce": cmd_produce,
-     "catalog": cmd_catalog, "demo": cmd_demo}[args.cmd](args)
+     "catalog": cmd_catalog, "room": cmd_room, "demo": cmd_demo}[args.cmd](args)
 
 
 if __name__ == "__main__":
