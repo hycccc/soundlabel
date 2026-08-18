@@ -4,10 +4,10 @@ Tiering philosophy — *auto metrics as guardrails, human eval as gold*:
 
 - The **gate** is cheap and binary: clipping, silence, broken duration. It
   exists to stop garbage before anyone (human or model) spends time on it.
-- The **rank** is a 0-10 heuristic used to order candidates, not to crown
-  them. If `songscore <https://github.com/hycccc/songscore>`_ is installed
-  its calibrated multi-dimension stack is used; otherwise a built-in lite
-  scorer covers the same ground with coarser features.
+- The **rank** is a 0-10 score used to order candidates, not to crown
+  them. The full multi-dimension stack (``soundlabel.scoring.composite``)
+  runs when scipy is available; a built-in lite scorer covers the same
+  ground with coarser features otherwise.
 - Human listening stays the gold standard; nothing in this module pretends
   otherwise.
 """
@@ -102,9 +102,9 @@ def score(path: str | Path, genre: str = "pop") -> ScoreReport:
     if not passed:
         return ScoreReport(False, reasons, 0.0, "gate", {})
     try:
-        from songscore.composite import score_song  # type: ignore
+        from .composite import score_song
         result = score_song(str(path), genre=genre)
-        return ScoreReport(True, [], float(result["composite"]), "songscore", result)
+        return ScoreReport(True, [], float(result["composite"]), "full", result)
     except ImportError:
         rank, detail = _lite_rank(path)
         return ScoreReport(True, [], rank, "lite", detail)

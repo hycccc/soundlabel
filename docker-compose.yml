@@ -14,5 +14,13 @@ services:
       # only needed for --llm agents; harmless when empty
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
+  ops:
+    build: ./ops
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    profiles: ["ops"]
+
 volumes:
   label-data:

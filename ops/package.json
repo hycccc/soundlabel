@@ -1,0 +1,24 @@
+{
+  "name": "soundlabel-ops",
+  "version": "0.1.0",
+  "description": "The label's ops sidecar \u2014 a production pattern for the Claude Agent SDK: oncall chat with sessions/revert, daily briefs, proactive watch, opt-in auto-reflection",
+  "private": false,
+  "type": "module",
+  "main": "src/server.mjs",
+  "scripts": {
+    "start": "node src/server.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.114",
+    "@anthropic-ai/sdk": "^0.92.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "license": "MIT",
+  "author": "Yuchen Hu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hycccc/soundlabel.git"
+  }
+}

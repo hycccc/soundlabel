@@ -4,19 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soundlabel"
-version = "0.3.0"
-description = "Open-source framework for running an AI music label: catalog, scoring stack, agent loop, pluggable generation backends"
+version = "0.4.0"
+description = "Open-source framework for running an AI music label: catalog, three-tier scoring stack, agent loop, ops sidecar, pluggable generation backends"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [{ name = "Yuchen Hu" }]
 dependencies = [
     "numpy>=1.24",
+    "scipy>=1.10",
     "soundfile>=0.12",
 ]
 
 [project.optional-dependencies]
-scoring = ["songscore @ git+https://github.com/hycccc/songscore.git"]
+zh = ["pypinyin"]
 llm = ["anthropic>=0.60"]
 rooms = ["livekit-api>=1.0"]
 dev = ["pytest>=7"]

@@ -3,3 +3,4 @@ __pycache__/
 label/
 .pytest_cache/
 build/
+ops/node_modules/

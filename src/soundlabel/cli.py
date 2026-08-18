@@ -63,6 +63,30 @@ def cmd_produce(args) -> None:
         sys.exit(1)
 
 
+def cmd_score(args) -> None:
+    from .scoring import gate
+    from .scoring.composite import score_song
+
+    passed, reasons = gate(args.audio)
+    read = lambda f: Path(f).read_text() if f else ""
+    result = score_song(args.audio, lyrics=read(args.lyrics),
+                        original_lyrics=read(args.original_lyrics),
+                        genre=args.genre, judge=args.judge, refs_dir=args.refs_dir)
+    if args.json:
+        print(json.dumps({"gate": passed, "gate_reasons": reasons, **result},
+                         ensure_ascii=False))
+        return
+    print(f"gate: {'pass' if passed else 'FAIL'}")
+    for r in reasons:
+        print(f"  - {r}")
+    print(f"composite: {result['composite']}/10")
+    for name, r in result["dimensions"].items():
+        flag = " (skipped)" if r.get("skipped") else ""
+        print(f"  {name:15} {r['score']:>5}{flag}")
+        for issue in r.get("issues", []):
+            print(f"    - {issue}")
+
+
 def cmd_catalog(args) -> None:
     catalog = Catalog(_workspace(args) / "catalog.db")
     rows = catalog.tracks()
@@ -152,6 +176,15 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("catalog", help="list released tracks")
 
+    scorep = sub.add_parser("score", help="score one audio file with the full stack")
+    scorep.add_argument("audio", help="audio file to score")
+    scorep.add_argument("--lyrics", help="lyrics text file")
+    scorep.add_argument("--original-lyrics", help="source lyrics for originality check")
+    scorep.add_argument("--genre", default="pop")
+    scorep.add_argument("--judge", action="store_true", help="add the LLM aesthetic dimension")
+    scorep.add_argument("--refs-dir", help="few-shot anchor directory (refs.json + clips)")
+    scorep.add_argument("--json", action="store_true")
+
     roomp = sub.add_parser("room", help="listening rooms (LiveKit)")
     rsub2 = roomp.add_subparsers(dest="room_cmd", required=True)
     rtoken = rsub2.add_parser("token", help="mint a join token (offline)")
@@ -170,7 +203,8 @@ def main(argv: list[str] | None = None) -> None:
 
     args = p.parse_args(argv)
     {"init": cmd_init, "roster": cmd_roster, "produce": cmd_produce,
-     "catalog": cmd_catalog, "room": cmd_room, "demo": cmd_demo}[args.cmd](args)
+     "catalog": cmd_catalog, "score": cmd_score, "room": cmd_room,
+     "demo": cmd_demo}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 [![ci](https://github.com/hycccc/soundlabel/actions/workflows/ci.yml/badge.svg)](https://github.com/hycccc/soundlabel/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-1fa88c.svg)](LICENSE)
 
-**An open-source framework for running an AI music label** — a catalog, a three-tier scoring stack, a multi-agent A&R loop, and a generation pipeline with pluggable backends. Runnable today with zero API keys:
+**An open-source framework for running an AI music label** — a catalog, a three-tier scoring stack, a multi-agent A&R loop, an oncall ops sidecar, and a generation pipeline with pluggable backends. Runnable today with zero API keys:
 
 ```bash
 pip install "soundlabel @ git+https://github.com/hycccc/soundlabel.git"
@@ -45,19 +45,19 @@ This is the open framework edition of a platform I've run in production since 20
    scoring)                                  Critic scoring)
         │                     │                   │                │
         ▼                     ▼                   ▼                ▼
-   livekit-server        [songscore]        [claude-oncall]   generation
-                                            pattern            backend plugin
-                                                               (mock included)
+   livekit-server       scoring/ (built    ops/ (oncall      generation
+                        into core)          sidecar, Node)    backend plugin
+                                                              (mock included)
 ```
 
-**Satellite components, already public:**
+**In this repository** — the scoring stack ([`src/soundlabel/scoring/`](src/soundlabel/scoring)) and the ops sidecar ([`ops/`](ops)) used to live as separate repos (songscore, claude-oncall); they are merged here because they are parts of one system, not products of their own.
+
+**Satellite components, standalone by design:**
 
 | Component | Role in the framework |
 |---|---|
-| [songscore](https://github.com/hycccc/songscore) | the scoring stack: DSP rules + reward-model hook + calibrated LLM judge |
 | [musicgen-if-eval](https://github.com/hycccc/musicgen-if-eval) | the human-evaluation methodology sitting above all automated scoring |
 | [audio-integrity-toolkit](https://github.com/hycccc/audio-integrity-toolkit) | the ingestion gate for any audio entering the catalog |
-| [claude-oncall](https://github.com/hycccc/claude-oncall) | the agent-sidecar pattern the A&R loop builds on |
 
 ## Design principles — enforced in code, not in prose
 
@@ -78,7 +78,7 @@ soundlabel -w ./mylabel produce nova           # A&R writes the brief for you
 soundlabel -w ./mylabel catalog
 ```
 
-Install with `pip install "soundlabel[scoring] @ ..."` to pull in [songscore](https://github.com/hycccc/songscore); the scoring stack detects it and upgrades from the built-in lite ranker to the calibrated multi-dimension scorer automatically.
+The full scoring stack is built in — `soundlabel score track.wav --lyrics lyrics.txt` runs the acceptance gate plus the multi-dimension scorer on any file, catalog or not, and `--judge` adds the anchored LLM aesthetic dimension (regression-tested against score-dispersion collapse in [`regression/`](regression)).
 
 Writing a backend is one class:
 
@@ -117,6 +117,16 @@ soundlabel room token release-night listener-1         # listener: hears + score
 
 Serve [`room/listen.html`](room/listen.html) (the reference client) and hand out tokens. The host plays a candidate file; it streams to every listener from the same playhead; listeners score 1-10 over the data channel. **The role split lives in the token, not in client-side goodwill** — listener tokens cannot publish audio, and there is a test for that. The sync/scoring wire protocol is four small JSON messages, documented in [`rooms.py`](src/soundlabel/rooms.py).
 
+## Ops sidecar (M6 — opt-in)
+
+A single-operator label needs someone on call. [`ops/`](ops) is that someone: a Node sidecar for the [Claude Agent SDK](https://docs.anthropic.com/en/api/agent-sdk/overview), extracted from the ops agent that has run my production label since 2026 — oncall chat with git-snapshot revert, context aggregation with freshness budgets, daily briefs, a proactive watcher whose chattiness is treated as a metric, and opt-in self-reflection with the cost math in the comments.
+
+```bash
+cd ops && npm ci && npm start        # boots without an API key; /health tells you what's missing
+```
+
+It is deliberately framework-agnostic — point it at any working directory and give it a persona ([`ops/persona/`](ops/persona)). The patterns are documented in [`ops/README.md`](ops/README.md).
+
 ## Deploy (M5)
 
 ```bash
@@ -126,17 +136,18 @@ docker compose run label produce ivy
 docker compose run label catalog
 ```
 
-One box, one volume (`label-data` holds the catalog and batches), one human. `ANTHROPIC_API_KEY` in `.env` enables `--llm`.
+One box, one volume (`label-data` holds the catalog and batches), one human. `ANTHROPIC_API_KEY` in `.env` enables `--llm`. `docker compose up ops` starts the oncall sidecar alongside.
 
 ## Roadmap
 
 - [x] **M0** — architecture, principles, roadmap
-- [x] **M1** — core data model + scoring integration: SQLite catalog, gate → rank stack, songscore auto-upgrade
+- [x] **M1** — core data model + scoring integration: SQLite catalog, gate → rank stack
 - [x] **M3** — generation backend interface + mock provider + registry (`--allow-paid` cost guard)
 - [x] **M4a** — the agent loop, heuristic edition: A&R brief (anti-rut, respects rejects) → generation → blind Critic verdict → release/redo/kill, with per-batch manifests
 - [x] **M4b** — LLM-backed A&R and Critic agents: same interfaces, structurally blind, opt-in cost (`--llm`)
 - [x] **M5** — single-operator deployment recipe (Dockerfile + docker compose, one box, one human)
 - [x] **M2** — listening room: LiveKit room orchestration, role-split tokens, synced playback + live scoring reference client
+- [x] **M6** — consolidation: the scoring stack (formerly [songscore](https://github.com/hycccc/songscore)) built into core as `soundlabel.scoring`; the oncall sidecar (formerly [claude-oncall](https://github.com/hycccc/claude-oncall)) merged as `ops/`
 
 ## Status
 

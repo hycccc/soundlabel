@@ -23,3 +23,25 @@ jobs:
         run: |
           soundlabel -w /tmp/demo-label demo --tracks 2
           soundlabel -w /tmp/demo-label catalog
+      - name: smoke-test the score command
+        run: |
+          f=$(find /tmp/demo-label/batches -name "*.wav" | head -1)
+          soundlabel score "$f" --json | python -c "import json,sys; r=json.load(sys.stdin); assert r['gate'] and 'composite' in r"
+
+  ops:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ops
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: syntax-check every module
+        run: for f in src/*.mjs; do node --check "$f"; done
+      - name: boot smoke test (no API key — server must still come up)
+        run: |
+          PORT=19833 node src/server.mjs &
+          curl -sf --retry 20 --retry-delay 1 --retry-connrefused http://localhost:19833/health
