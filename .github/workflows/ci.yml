@@ -36,7 +36,7 @@ jobs:
           printf '{"room":"ci-night","scores":[{"track_id":"%s","identity":"ci","score":8}]}' "$tid" > /tmp/session.json
           soundlabel -w /tmp/demo-label room ingest /tmp/session.json
           soundlabel -w /tmp/demo-label catalog | grep -F 'room 8.0×1'
-          python -c "import json; t=json.load(open('/tmp/demo-label/state.json'))['tracks']['recent'][0]; assert t['room'] == {'avg': 8.0, 'n': 1}"
+          python -c "import json; s=json.load(open('/tmp/demo-label/state.json')); tid=s['tracks']['recent'][0]['id']; assert s['room_reception'][tid] == {'avg': 8.0, 'n': 1} and 'room_policy' in s"
 
   ops:
     runs-on: ubuntu-latest

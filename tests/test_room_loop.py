@@ -95,12 +95,15 @@ def test_cli_queue_ingest_catalog_flow(tmp_path, capsys):
     main(["-w", str(ws), "catalog"])
     assert "room 8.0×1" in capsys.readouterr().out
     state = json.loads((ws / "state.json").read_text())
-    by_id = {t["id"]: t for t in state["tracks"]["recent"]}
-    assert by_id[tids[0]]["room"] == {"avg": 8.0, "n": 1}
-    assert by_id[tids[1]]["room"] is None
-    # the full reception map is exported too — the ops sidecar reviews
-    # arbitrary batches, not just the recent five tracks
+    # reception is serialized exactly once, in the full map — the sidecar
+    # reviews arbitrary batches, not just the recent five tracks
     assert state["room_reception"] == {tids[0]: {"avg": 8.0, "n": 1}}
+    assert all("room" not in t for t in state["tracks"]["recent"])
+    # the policy travels with the data, from the single source in agents/anr.py
+    from soundlabel.agents.anr import COLD_ROOM_AVG, LOVED_ROOM_AVG, MIN_ROOM_SCORES
+    assert state["room_policy"] == {"min_scores": MIN_ROOM_SCORES,
+                                    "cold_avg": COLD_ROOM_AVG,
+                                    "loved_avg": LOVED_ROOM_AVG}
 
 
 # ---------------------------------------------------------- A&R follows the room

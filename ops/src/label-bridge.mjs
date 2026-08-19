@@ -44,7 +44,8 @@ export function buildLabelBlock() {
     lines.push('## Catalog')
     lines.push(`- released tracks: ${t.count}${t.avg_score != null ? `, avg score ${t.avg_score}` : ''}`)
     for (const r of t.recent ?? []) {
-      const room = r.room ? ` (room ${r.room.avg}×${r.room.n})` : ''
+      const rec = state.room_reception?.[r.id]
+      const room = rec ? ` (room ${rec.avg}×${rec.n})` : ''
       lines.push(`- ${r.id} ${r.score} ${r.artist} — ${r.title}${room}`)
     }
     lines.push('')
@@ -80,11 +81,15 @@ function stepsByName(manifest) {
 // same review. Room reception (when the workspace has it) outranks the
 // critic's verdict for released tracks — the room heard it, the critic
 // only measured it.
-const MIN_ROOM_SCORES = 2   // one listener's mood is not a trend
-const COLD_ROOM_AVG = 6.0
-const LOVED_ROOM_AVG = 8.0
+//
+// The thresholds come from state.json's room_policy, exported by the Python
+// side from agents/anr.py — the single source of the reception policy, so
+// the A&R agent and this reviewer can never disagree about what "cold"
+// means. The literals below are only the fallback for a missing policy key.
+const DEFAULT_ROOM_POLICY = { min_scores: 2, cold_avg: 6.0, loved_avg: 8.0 }
 
 export function heuristicReview(manifest, state = readState()) {
+  const policy = { ...DEFAULT_ROOM_POLICY, ...(state?.room_policy ?? {}) }
   const by = stepsByName(manifest)
   const brief = by.brief?.[0]?.brief
   const score = by.score?.[0]
@@ -99,11 +104,7 @@ export function heuristicReview(manifest, state = readState()) {
   for (const r of critic?.reasons ?? []) notes.push(`critic: ${r}`)
 
   const trackId = by.catalog?.[0]?.track_id
-  const room = trackId
-    ? state?.room_reception?.[trackId]
-      ?? state?.tracks?.recent?.find((t) => t.id === trackId)?.room
-      ?? null
-    : null
+  const room = trackId ? state?.room_reception?.[trackId] ?? null : null
 
   let headline
   let action
@@ -113,10 +114,10 @@ export function heuristicReview(manifest, state = readState()) {
     action = 'queue for a listening-room session before promo'
     if (room) {
       notes.push(`room reception: ${room.avg}×${room.n}`)
-      if (room.n >= MIN_ROOM_SCORES && room.avg < COLD_ROOM_AVG) {
+      if (room.n >= policy.min_scores && room.avg < policy.cold_avg) {
         headline = `released, but the room is cold on it (${room.avg}×${room.n})`
         action = 'pull it from the promo queue — the room outvoted the critic'
-      } else if (room.n >= MIN_ROOM_SCORES && room.avg >= LOVED_ROOM_AVG) {
+      } else if (room.n >= policy.min_scores && room.avg >= policy.loved_avg) {
         headline = `released and the room loves it (${room.avg}×${room.n})`
         action = 'fast-track promo and open the next session with it'
       }
@@ -149,15 +150,21 @@ export function heuristicReview(manifest, state = readState()) {
   }
 }
 
-// LLM review: same shape, written by a model that sees the manifest and the
-// label state. Falls back to the heuristic on any failure — a review request
-// never errors just because a model call did.
+// LLM review: same shape, written by a model that sees everything the
+// heuristic sees — manifest, label state, this track's room reception, and
+// the reception policy — plus the deterministic baseline review itself, so
+// the paid path is never LESS informed than the free one. Falls back to the
+// heuristic on any failure — a review request never errors just because a
+// model call did.
 export async function llmReview(manifest, { model, apiKey } = {}) {
-  const fallback = heuristicReview(manifest)
+  const state = readState()
+  const fallback = heuristicReview(manifest, state)
   if (!apiKey) return { ...fallback, llm_error: 'no API key configured' }
   try {
     const { default: Anthropic } = await import('@anthropic-ai/sdk')
     const client = new Anthropic({ apiKey })
+    const trackId = (manifest.steps ?? []).find((s) => s.step === 'catalog')?.track_id
+    const room = trackId ? state?.room_reception?.[trackId] ?? null : null
     const response = await client.messages.create({
       model: model || 'claude-sonnet-4-6',
       max_tokens: 600,
@@ -165,11 +172,19 @@ export async function llmReview(manifest, { model, apiKey } = {}) {
         'You are the ops reviewer of an AI music label. Given a batch manifest ' +
         'and the label state, return STRICT JSON: {"headline": string (<=100 chars, ' +
         'what happened and the verdict), "notes": string[] (<=4, concrete observations), ' +
-        '"action": string (the single next move)}. No prose outside the JSON.',
+        '"action": string (the single next move)}. No prose outside the JSON. ' +
+        'House policy: listening-room reception on a released track, at or above ' +
+        'the policy min_scores, outranks the critic — cold (avg < cold_avg) means ' +
+        'pull it from promo, loved (avg >= loved_avg) means fast-track it.',
       messages: [
         {
           role: 'user',
-          content: `Label state:\n${buildLabelBlock() || '(none)'}\n\nBatch manifest:\n${JSON.stringify(manifest, null, 2)}`,
+          content: `Label state:\n${buildLabelBlock() || '(none)'}\n\n` +
+            `Reception policy: ${JSON.stringify(state?.room_policy ?? DEFAULT_ROOM_POLICY)}\n` +
+            `This track's room reception: ${room ? JSON.stringify(room) : 'none yet'}\n\n` +
+            `Deterministic baseline review (improve on it, do not contradict the policy):\n` +
+            `${JSON.stringify({ headline: fallback.headline, notes: fallback.notes, action: fallback.action })}\n\n` +
+            `Batch manifest:\n${JSON.stringify(manifest, null, 2)}`,
         },
       ],
     })
@@ -193,6 +208,8 @@ export function writeReview(batchId, review) {
   if (!WORKSPACE || !BATCH_ID_RE.test(batchId)) return null
   const file = path.join(WORKSPACE, 'batches', batchId, 'ops-review.json')
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, JSON.stringify(review, null, 2))
+  // atomic replace — `soundlabel batches` reads this on its own schedule
+  fs.writeFileSync(`${file}.tmp`, JSON.stringify(review, null, 2))
+  fs.renameSync(`${file}.tmp`, file)
   return file
 }

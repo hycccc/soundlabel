@@ -17,10 +17,12 @@ other — the files are the API.
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import asdict
 from pathlib import Path
 
+from .agents.anr import COLD_ROOM_AVG, LOVED_ROOM_AVG, MIN_ROOM_SCORES
 from .catalog import Catalog
 
 STATE_VERSION = 1
@@ -42,8 +44,7 @@ def export_state(workspace: str | Path) -> Path:
             "avg_score": round(sum(scores) / len(scores), 3) if scores else None,
             "recent": [
                 {"id": r["id"], "title": r["title"], "artist": r["artist_slug"],
-                 "score": r["score"], "verdict": r["verdict"],
-                 "room": reception.get(r["id"])}
+                 "score": r["score"], "verdict": r["verdict"]}
                 for r in tracks[-5:][::-1]
             ],
         },
@@ -54,12 +55,21 @@ def export_state(workspace: str | Path) -> Path:
         ],
         # full reception map (not just recent tracks) — the sidecar reviews
         # arbitrary batches, and a score that scrolled out of `recent`
-        # must still be visible to it
+        # must still be visible to it. This is the only serialization of
+        # reception; `recent` entries deliberately don't repeat it.
         "room_reception": reception,
+        # the reception policy travels with the data so the sidecar applies
+        # the SAME thresholds as the A&R agent — anr.py is the single source
+        "room_policy": {"min_scores": MIN_ROOM_SCORES, "cold_avg": COLD_ROOM_AVG,
+                        "loved_avg": LOVED_ROOM_AVG},
     }
     catalog.close()
     path = workspace / "state.json"
-    path.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+    # atomic replace: the sidecar reads this file on its own schedule, and a
+    # torn read would silently cost a review its room signal
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+    os.replace(tmp, path)
     return path
 
 
