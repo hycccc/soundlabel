@@ -52,8 +52,9 @@ jobs:
           python-version: "3.12"
       - name: label↔ops wiring smoke (state.json → /label/review → soundlabel batches)
         working-directory: .
+        # no apt here: the manylinux soundfile wheel bundles libsndfile, and
+        # apt mirror flakiness once ate this job's whole timeout budget
         run: |
-          sudo apt-get update && sudo apt-get install -y libsndfile1
           pip install -e .
           soundlabel -w /tmp/wire demo --tracks 1
           test -f /tmp/wire/state.json
