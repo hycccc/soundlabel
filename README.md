@@ -131,6 +131,8 @@ ingested 2 score(s) from room 'release-night'
 
 Human reception then shows up everywhere the machine score does: in `soundlabel catalog`, in the A&R agent's history, and in the state snapshot the ops sidecar injects into its system prompt. A listener re-scoring the same track overwrites their previous score — changing your mind is signal, padding the count is not. Queue and ingest are fully offline (no LiveKit, no extras); scores for unknown tracks are skipped and reported, never silently dropped.
 
+**And the reception steers production (M9).** Room scores roll up from tracks to styles, and the A&R agent's rule set grows a third rule that outranks the other two: *follow the room*. A style the room is cold on (avg < 6 over 2+ scores) stops getting briefed; a style the room loves (avg ≥ 8 over 2+ scores) wins the next brief — even the dominant style anti-rut would have dropped, because measured demand beats presumed fatigue. One listener's mood is not a trend: both cuts require 2+ scores. The LLM A&R gets the same instruction in its prompt; the heuristic one has it in code, with tests for all three interactions.
+
 ## Ops sidecar (M6 — opt-in)
 
 A single-operator label needs someone on call. [`ops/`](ops) is that someone: a Node sidecar for the [Claude Agent SDK](https://docs.anthropic.com/en/api/agent-sdk/overview), extracted from the ops agent that has run my production label since 2026 — oncall chat with git-snapshot revert, context aggregation with freshness budgets, daily briefs, a proactive watcher whose chattiness is treated as a metric, and opt-in self-reflection with the cost math in the comments.
@@ -176,6 +178,7 @@ One box, one volume (`label-data` holds the catalog and batches), one human. `AN
 - [x] **M6** — consolidation: the scoring stack (formerly [songscore](https://github.com/hycccc/songscore)) built into core as `soundlabel.scoring`; the oncall sidecar (formerly [claude-oncall](https://github.com/hycccc/claude-oncall)) merged as `ops/`
 - [x] **M7** — label↔ops wiring: the sidecar reads the workspace (`state.json` in every system prompt, `GET /label/state`) and writes batch reviews back (`POST /label/review` → `ops-review.json` → `soundlabel batches`); file contract, no shared database
 - [x] **M8** — the room feeds back: `room queue` picks unheard released tracks from the catalog, scores carry track ids, the host exports the session, `room ingest` writes human reception into the catalog — visible to `catalog`, the A&R agent, and the ops sidecar
+- [x] **M9** — the reception steers production: room scores roll up to style level and the A&R agents follow the room — cold styles stop getting briefed, loved styles win the next brief over anti-rut; 2+ scores required, one listener's mood is not a trend
 
 ## Status
 

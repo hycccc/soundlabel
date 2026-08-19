@@ -98,3 +98,72 @@ def test_cli_queue_ingest_catalog_flow(tmp_path, capsys):
     by_id = {t["id"]: t for t in state["tracks"]["recent"]}
     assert by_id[tids[0]]["room"] == {"avg": 8.0, "n": 1}
     assert by_id[tids[1]]["room"] is None
+
+
+# ---------------------------------------------------------- A&R follows the room
+
+from soundlabel.agents.anr import ANRAgent
+
+
+def _history(style_reception, styles_seen=("pop", "ballad", "rnb")):
+    return {"n_tracks": 3, "style_counts": {s: 1 for s in styles_seen},
+            "recent_verdicts": ["accept"], "style_reception": style_reception}
+
+
+def test_anr_avoids_cold_style():
+    """A style the room scores below 6 (over 2+ scores) never gets briefed."""
+    artist = Artist("ivy", "Ivy", sonic_profile="pop, ballad, rnb")
+    history = _history({"ballad": {"avg": 4.5, "n": 3}})
+    for seed in range(20):
+        brief = ANRAgent().write_brief(artist, history, seed=seed)
+        assert brief.style_tags != ["ballad"]
+
+
+def test_anr_leans_into_loved_style():
+    """A style the room scores >= 8 (over 2+ scores) wins the next brief."""
+    artist = Artist("ivy", "Ivy", sonic_profile="pop, ballad, rnb")
+    history = _history({"rnb": {"avg": 8.6, "n": 4}})
+    for seed in range(5):
+        assert ANRAgent().write_brief(artist, history, seed=seed).style_tags == ["rnb"]
+
+
+def test_one_listener_is_not_a_trend():
+    """n=1 reception, however extreme, changes nothing."""
+    artist = Artist("ivy", "Ivy", sonic_profile="pop, ballad, rnb")
+    cold_but_thin = _history({"ballad": {"avg": 1.0, "n": 1}})
+    picked = {tuple(ANRAgent().write_brief(artist, cold_but_thin, seed=s).style_tags)
+              for s in range(30)}
+    assert ("ballad",) in picked
+
+
+def test_loved_dominant_beats_anti_rut():
+    """Measured demand overrides presumed fatigue: a dominant style the room
+    loves is briefed again even though anti-rut alone would drop it."""
+    artist = Artist("ivy", "Ivy", sonic_profile="pop, ballad, rnb")
+    history = {"n_tracks": 6, "style_counts": {"pop": 5, "ballad": 1},
+               "recent_verdicts": ["accept"],
+               "style_reception": {"pop": {"avg": 9.0, "n": 3}}}
+    assert ANRAgent().write_brief(artist, history).style_tags == ["pop"]
+    # ...and without the room signal, anti-rut does drop it
+    no_room = {**history, "style_reception": {}}
+    for seed in range(20):
+        assert ANRAgent().write_brief(artist, no_room, seed=seed).style_tags != ["pop"]
+
+
+def test_style_reception_rollup(tmp_path):
+    """Catalog.history aggregates track-level room scores to style level."""
+    ws = tmp_path / "label"
+    catalog = Catalog(ws / "catalog.db")
+    catalog.add_artist(Artist("ivy", "Ivy"))
+    tids = []
+    for i, style in enumerate(["pop", "pop"]):
+        wav = tmp_path / f"s{i}.wav"
+        wav.write_bytes(b"RIFF" + bytes([i]))
+        tids.append(catalog.add_track("ivy", f"S{i}", wav, 6.0, "accept",
+                                      score_detail={"style_tags": [style]}))
+    catalog.add_room_score(tids[0], "night", "zoe", 9)
+    catalog.add_room_score(tids[1], "night", "zoe", 5)
+    catalog.add_room_score(tids[1], "night", "kai", 6)
+    rollup = catalog.history("ivy")["style_reception"]
+    assert rollup == {"pop": {"avg": round((9 + 5 + 6) / 3, 2), "n": 3}}
+    catalog.close()

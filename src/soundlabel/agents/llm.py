@@ -89,7 +89,11 @@ class LLMANRAgent:
             f"Catalog history: {json.dumps(history, ensure_ascii=False)}\n\n"
             "House rules: avoid repeating the dominant style when it already "
             "dominates the catalog; if the last verdict was a redo or kill, move "
-            "away from that direction rather than retrying it harder. Pick a "
+            "away from that direction rather than retrying it harder. "
+            "style_reception in the history is measured listening-room audience "
+            "signal and outranks both rules above: lean into styles the room "
+            "scores high, away from ones it scores low (2+ scores; one "
+            "listener's mood is not a trend). Pick a "
             "style_tag from the allowed list, a bpm that suits it, and a theme "
             "with a concrete image in it (not an abstraction)."
         )

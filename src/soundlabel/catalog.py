@@ -184,10 +184,23 @@ class Catalog:
             for tag in json.loads(r["score_json"]).get("style_tags", []):
                 styles[tag] = styles.get(tag, 0) + 1
         reception = self.room_reception()
+        # roll track-level room scores up to style level: the A&R agent
+        # steers by direction, not by individual song
+        style_totals: dict[str, list[float]] = {}
+        for r in rows:
+            rec = reception.get(r["id"])
+            if not rec:
+                continue
+            for tag in json.loads(r["score_json"]).get("style_tags", []):
+                agg = style_totals.setdefault(tag, [0.0, 0])
+                agg[0] += rec["avg"] * rec["n"]
+                agg[1] += rec["n"]
         return {"n_tracks": len(rows), "style_counts": styles,
                 "recent_verdicts": verdicts[-5:],
                 "room_reception": {r["id"]: reception[r["id"]]
-                                   for r in rows if r["id"] in reception}}
+                                   for r in rows if r["id"] in reception},
+                "style_reception": {t: {"avg": round(s / n, 2), "n": n}
+                                    for t, (s, n) in style_totals.items()}}
 
     def close(self) -> None:
         self._conn.close()
