@@ -98,6 +98,9 @@ def test_cli_queue_ingest_catalog_flow(tmp_path, capsys):
     by_id = {t["id"]: t for t in state["tracks"]["recent"]}
     assert by_id[tids[0]]["room"] == {"avg": 8.0, "n": 1}
     assert by_id[tids[1]]["room"] is None
+    # the full reception map is exported too — the ops sidecar reviews
+    # arbitrary batches, not just the recent five tracks
+    assert state["room_reception"] == {tids[0]: {"avg": 8.0, "n": 1}}
 
 
 # ---------------------------------------------------------- A&R follows the room

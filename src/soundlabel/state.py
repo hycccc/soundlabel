@@ -52,6 +52,10 @@ def export_state(workspace: str | Path) -> Path:
              "status": r["status"]}
             for r in catalog.batches(limit=10)
         ],
+        # full reception map (not just recent tracks) — the sidecar reviews
+        # arbitrary batches, and a score that scrolled out of `recent`
+        # must still be visible to it
+        "room_reception": reception,
     }
     catalog.close()
     path = workspace / "state.json"

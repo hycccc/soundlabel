@@ -74,3 +74,10 @@ jobs:
           curl -sf -X POST http://localhost:19834/label/review \
             -H 'content-type: application/json' -d "{\"batchId\":\"$bid\"}" | grep -F '"headline"'
           soundlabel -w /tmp/wire batches | grep -F 'ops[heuristic]:'
+          # the room goes cold on the release → the re-review must say so
+          tid=$(python -c "import json; print(json.load(open('/tmp/wire/state.json'))['tracks']['recent'][0]['id'])")
+          printf '{"room":"ci","scores":[{"track_id":"%s","identity":"a","score":3},{"track_id":"%s","identity":"b","score":4}]}' "$tid" "$tid" > /tmp/cold.json
+          soundlabel -w /tmp/wire room ingest /tmp/cold.json
+          curl -sf -X POST http://localhost:19834/label/review \
+            -H 'content-type: application/json' -d "{\"batchId\":\"$bid\"}" | grep -F 'outvoted the critic'
+          soundlabel -w /tmp/wire batches | grep -F 'pull it from the promo queue'

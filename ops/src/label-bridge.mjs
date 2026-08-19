@@ -75,9 +75,16 @@ function stepsByName(manifest) {
   return by
 }
 
-// Deterministic review from the manifest alone: what happened, why, and the
-// one next action. No tokens spent; same manifest → same review.
-export function heuristicReview(manifest) {
+// Deterministic review from the manifest plus the label state: what
+// happened, why, and the one next action. No tokens spent; same inputs →
+// same review. Room reception (when the workspace has it) outranks the
+// critic's verdict for released tracks — the room heard it, the critic
+// only measured it.
+const MIN_ROOM_SCORES = 2   // one listener's mood is not a trend
+const COLD_ROOM_AVG = 6.0
+const LOVED_ROOM_AVG = 8.0
+
+export function heuristicReview(manifest, state = readState()) {
   const by = stepsByName(manifest)
   const brief = by.brief?.[0]?.brief
   const score = by.score?.[0]
@@ -91,12 +98,29 @@ export function heuristicReview(manifest) {
   for (const e of genErrors) notes.push(`generate error: ${e}`)
   for (const r of critic?.reasons ?? []) notes.push(`critic: ${r}`)
 
+  const trackId = by.catalog?.[0]?.track_id
+  const room = trackId
+    ? state?.room_reception?.[trackId]
+      ?? state?.tracks?.recent?.find((t) => t.id === trackId)?.room
+      ?? null
+    : null
+
   let headline
   let action
   const status = manifest.status
   if (status === 'released') {
     headline = `released — rank ${score?.rank ?? '?'}/10 (${score?.scorer ?? '?'}), critic accepted`
     action = 'queue for a listening-room session before promo'
+    if (room) {
+      notes.push(`room reception: ${room.avg}×${room.n}`)
+      if (room.n >= MIN_ROOM_SCORES && room.avg < COLD_ROOM_AVG) {
+        headline = `released, but the room is cold on it (${room.avg}×${room.n})`
+        action = 'pull it from the promo queue — the room outvoted the critic'
+      } else if (room.n >= MIN_ROOM_SCORES && room.avg >= LOVED_ROOM_AVG) {
+        headline = `released and the room loves it (${room.avg}×${room.n})`
+        action = 'fast-track promo and open the next session with it'
+      }
+    }
   } else if (status === 'redo') {
     headline = `critic sent it back: ${critic?.reasons?.[0] ?? 'no reason recorded'}`
     action = 'rerun with the brief adjusted for the first critic reason'

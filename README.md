@@ -155,6 +155,8 @@ batch_c781e7af  released  june-holiday  mock
 
 The two processes share no database — Python exports `state.json`, Node writes reviews back, and the files are the API. Reviews are deterministic-heuristic by default; `{"llm": true}` upgrades to a model-written review with the same shape (and falls back to the heuristic if the call fails). Same free-by-default/opt-in-spend split as `--llm` and `--allow-paid`.
 
+Reviews also read the room: for a released track with 2+ room scores, cold reception (avg < 6) flips the review to *"pull it from the promo queue — the room outvoted the critic"*, and loved reception (avg ≥ 8) to *"fast-track promo"*. The room heard it; the critic only measured it.
+
 ## Deploy (M5)
 
 ```bash
