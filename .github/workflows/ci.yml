@@ -17,7 +17,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: sudo apt-get update && sudo apt-get install -y libsndfile1
+      # no apt: the manylinux soundfile wheel bundles libsndfile, and the
+      # azure apt mirror has eaten whole jobs' timeout budgets before
       - run: pip install -e ".[dev]"
       - run: pytest -v
       - name: smoke-test the CLI demo
