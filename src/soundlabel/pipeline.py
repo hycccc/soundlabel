@@ -19,6 +19,7 @@ from .backends import GenerationBackend, get_backend
 from .brief import Brief
 from .catalog import Catalog
 from .scoring import ScoreReport, score
+from .state import export_state
 
 GENERATE_RETRIES = 2
 
@@ -77,6 +78,7 @@ def run_batch(
             indent=2, ensure_ascii=False))
         catalog.close_batch(batch_id, status, str(manifest_path))
         catalog.close()
+        export_state(workspace)
         return BatchResult(batch_id, status, track_id,
                            str(audio_path) if audio_path else None,
                            verdict, report, str(manifest_path))
@@ -86,6 +88,8 @@ def run_batch(
     if estimate > 0 and not allow_paid:
         _step(manifest, "cost-check", started, refused=True, estimate=estimate)
         catalog.close_batch(batch_id, "refused")
+        catalog.close()
+        export_state(workspace)
         raise PaidBackendRefused(
             f"backend {be.name!r} estimates cost {estimate}; pass allow_paid=True "
             f"(CLI: --allow-paid) to spend it")

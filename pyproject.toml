@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soundlabel"
-version = "0.4.0"
+version = "0.5.0"
 description = "Open-source framework for running an AI music label: catalog, three-tier scoring stack, agent loop, ops sidecar, pluggable generation backends"
 readme = "README.md"
 license = { text = "MIT" }

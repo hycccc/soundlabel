@@ -47,3 +47,20 @@ jobs:
         run: |
           PORT=19833 node src/server.mjs &
           curl -sf --retry 20 --retry-delay 1 --retry-connrefused http://localhost:19833/health
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: label↔ops wiring smoke (state.json → /label/review → soundlabel batches)
+        working-directory: .
+        run: |
+          sudo apt-get update && sudo apt-get install -y libsndfile1
+          pip install -e .
+          soundlabel -w /tmp/wire demo --tracks 1
+          test -f /tmp/wire/state.json
+          SOUNDLABEL_WORKSPACE=/tmp/wire PORT=19834 node ops/src/server.mjs &
+          curl -sf --retry 20 --retry-delay 1 --retry-connrefused http://localhost:19834/health | grep -F '/tmp/wire'
+          curl -sf http://localhost:19834/label/state | grep -F '"batches"'
+          bid=$(python -c "import json; print(json.load(open('/tmp/wire/state.json'))['batches'][0]['id'])")
+          curl -sf -X POST http://localhost:19834/label/review \
+            -H 'content-type: application/json' -d "{\"batchId\":\"$bid\"}" | grep -F '"headline"'
+          soundlabel -w /tmp/wire batches | grep -F 'ops[heuristic]:'

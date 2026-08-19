@@ -98,7 +98,7 @@ function summarizeBatch(b) {
     if (r.avg_overall != null) line += `, avg ${r.avg_overall}`
     if (grades) line += ` (${grades})`
     if (r.showcase_count) line += `, showcase ${r.showcase_count}`
-    if (r.xiaoqian_lesson) line += `\n    💡 ${r.xiaoqian_lesson}`
+    if (r.lesson) line += `\n    💡 ${r.lesson}`
     return line
   }
   const s = b.summary
@@ -212,7 +212,7 @@ let personaCache = ''
 let personaLoadedAt = 0
 const PERSONA_PATH = path.resolve(
   process.env.ONCALL_PERSONA_PATH
-    || new URL('../persona/xiaoqian.md', import.meta.url).pathname,
+    || new URL('../persona/example.md', import.meta.url).pathname,
 )
 const CATCHPHRASE_PATH = path.resolve(
   process.env.ONCALL_CATCHPHRASE_PATH

@@ -10,6 +10,8 @@ GET  /daily-brief              cached morning report, one generation per (date, 
 POST /quick-ask                short-form commentary with response caching
 GET  /proactive-queue          nudges from the periodic watcher
 POST /files/upload             attachments via in-memory cache (see below)
+GET  /label/state              the label workspace snapshot (state.json)
+POST /label/review             review a batch → batches/<id>/ops-review.json
 ```
 
 ## The patterns worth stealing
@@ -30,6 +32,8 @@ POST /files/upload             attachments via in-memory cache (see below)
 
 **Artist sub-personas from file-based memory** (`artist-persona.mjs`) — `@slug` mentions load that entity's 4-file memory (`sonic-profile / successes / failures / audience`) as a sub-frame; empty memory is admitted, never fabricated.
 
+**A file contract instead of a shared database** (`label-bridge.mjs`) — the Python pipeline and the Node sidecar never share a SQL connection. Python exports `state.json` after every batch; the sidecar injects it into the system prompt, and writes batch reviews back as `batches/<id>/ops-review.json` for `soundlabel batches` to display. Reviews are deterministic-heuristic by default and LLM-backed on request (`{"llm": true}`), the same free-by-default/opt-in-spend split the Python agents use. Either process can be down, restarted, or upgraded without breaking the other.
+
 ## Run it
 
 ```bash
@@ -38,7 +42,7 @@ ANTHROPIC_API_KEY=... ONCALL_CWD=/path/to/your/repo npm start
 # then: curl localhost:9833/health
 ```
 
-Configuration is all env: `ONCALL_PROMPTS_DIR` (system prompt + optional sandbox extension), `ONCALL_PERSONA` path, `SANDBOX_BACKEND_URL` for the context sources, `ONCALL_MODEL`, `ONCALL_THINKING_BUDGET`.
+Configuration is all env: `ONCALL_PROMPTS_DIR` (system prompt + optional sandbox extension), `ONCALL_PERSONA` path, `SANDBOX_BACKEND_URL` for the context sources, `ONCALL_MODEL`, `ONCALL_THINKING_BUDGET`, and `SOUNDLABEL_WORKSPACE` to wire it to a label workspace (docker compose sets this to the shared volume automatically).
 
 ## Provenance
 

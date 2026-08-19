@@ -106,6 +106,11 @@ class Catalog:
         )
         self._conn.commit()
 
+    def batches(self, limit: int = 10) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT * FROM batches ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+
     # -- tracks -----------------------------------------------------------
     def add_track(
         self,

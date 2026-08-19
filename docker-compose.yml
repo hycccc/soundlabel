@@ -18,8 +18,13 @@ services:
     build: ./ops
     ports:
       - "127.0.0.1:8787:8787"
+    volumes:
+      # same volume as the label: the sidecar reads state.json and writes
+      # batch reviews into batches/<id>/ops-review.json
+      - label-data:/label
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SOUNDLABEL_WORKSPACE: /label
     profiles: ["ops"]
 
 volumes:

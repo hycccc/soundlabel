@@ -13,6 +13,10 @@ import { startProactiveWatch, getQueue, clearQueueItem } from './proactive-watch
 import { startAutoReflection } from './auto-reflection.mjs'
 import { detectArtistMention, buildArtistPersonaBlock } from './artist-persona.mjs'
 import { heatModifier } from './heat-modifier.mjs'
+import {
+  WORKSPACE as LABEL_WORKSPACE,
+  buildLabelBlock, heuristicReview, llmReview, readManifest, readState, writeReview,
+} from './label-bridge.mjs'
 
 const execFileP = promisify(execFile)
 
@@ -183,7 +187,46 @@ const active = new Map()
 const liveRuns = new Map()
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, cwd: DEFAULT_CWD, model: DEFAULT_MODEL, active: active.size, sessionsDir: SESSIONS_DIR })
+  res.json({
+    ok: true, cwd: DEFAULT_CWD, model: DEFAULT_MODEL, active: active.size,
+    sessionsDir: SESSIONS_DIR, labelWorkspace: LABEL_WORKSPACE || null,
+  })
+})
+
+// ── Label wiring ───────────────────────────────────────────────────────────
+// Enabled when SOUNDLABEL_WORKSPACE points at a label workspace (docker
+// compose mounts the shared volume and sets it). See label-bridge.mjs for
+// the file contract with the Python side.
+
+app.get('/label/state', (_req, res) => {
+  if (!LABEL_WORKSPACE) {
+    return res.status(404).json({ error: 'SOUNDLABEL_WORKSPACE not configured' })
+  }
+  const state = readState()
+  if (!state) return res.status(404).json({ error: `no state.json in ${LABEL_WORKSPACE} — run a batch first` })
+  res.json(state)
+})
+
+// POST /label/review  body: { batchId, llm? }
+// Reviews one batch from its manifest and writes batches/<id>/ops-review.json,
+// which `soundlabel batches` displays. Heuristic by default; llm:true spends
+// tokens (and still falls back to the heuristic if the model call fails).
+app.post('/label/review', async (req, res) => {
+  if (!LABEL_WORKSPACE) {
+    return res.status(404).json({ error: 'SOUNDLABEL_WORKSPACE not configured' })
+  }
+  const { batchId, llm } = req.body ?? {}
+  if (typeof batchId !== 'string') return res.status(400).json({ error: 'batchId required' })
+  const manifest = readManifest(batchId)
+  if (!manifest) return res.status(404).json({ error: `no manifest for ${batchId}` })
+  const review = llm
+    ? await llmReview(manifest, {
+        model: DEFAULT_MODEL,
+        apiKey: process.env.STEP2_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '',
+      })
+    : heuristicReview(manifest)
+  const file = writeReview(batchId, review)
+  res.json({ review, file })
 })
 
 app.get('/sessions', async (req, res) => {
@@ -316,7 +359,7 @@ app.get('/daily-brief', async (req, res) => {
     return res.status(404).json({ error: 'daily-brief is sandbox-only' })
   }
   const force = req.query.force === '1'
-  const heat = heatModifier(req.headers['x-xiaoqian-heat'])
+  const heat = heatModifier(req.headers['x-ops-heat'])
   try {
     const out = await generateBrief({ force, heatSuffix: heat.suffix, heatBand: heat.band })
     res.json(out)
@@ -336,7 +379,7 @@ app.post('/quick-ask', async (req, res) => {
   if (!query || typeof query !== 'string') {
     return res.status(400).json({ error: 'query required' })
   }
-  const heat = heatModifier(req.headers['x-xiaoqian-heat'])
+  const heat = heatModifier(req.headers['x-ops-heat'])
   try {
     const out = await quickAsk({
       query: query.slice(0, 3000),  // cap input length
@@ -356,6 +399,7 @@ app.post('/chat', async (req, res) => {
   // does not. Used to gate experimental capabilities (multi-agent orchestration,
   // persistent memory, sandbox-only DB pointers) so prod oncall stays stable.
   const oncallMode = req.headers['x-oncall-mode'] === 'sandbox' ? 'sandbox' : 'production'
+  const { message, sessionId, cwd, model, thinkingBudget, userId: rawUserId, attachments } = req.body ?? {}
 
   // Sandbox: layer the system prompt as
   //   base (Claude Code preset)            ← injected by SDK
@@ -386,7 +430,7 @@ app.post('/chat', async (req, res) => {
       }
     }
     const artistBlock = detectedArtist ? buildArtistPersonaBlock(detectedArtist) : ''
-    const { heat, band, suffix: heatSuffix } = heatModifier(req.headers['x-xiaoqian-heat'])
+    const { heat, band, suffix: heatSuffix } = heatModifier(req.headers['x-ops-heat'])
     const sections = [ONCALL_SYSTEM_PROMPT]
     if (persona) sections.push(persona)
     if (artistBlock) sections.push(artistBlock)
@@ -398,7 +442,10 @@ app.post('/chat', async (req, res) => {
   } else {
     console.log(`[oncall] /chat mode=${oncallMode} systemPromptChars=${effectiveSystemPrompt.length}`)
   }
-  const { message, sessionId, cwd, model, thinkingBudget, userId: rawUserId, attachments } = req.body ?? {}
+  // Label wiring: when a workspace is configured, every mode gets the label
+  // state block — the whole point of running the sidecar next to a label.
+  const labelBlock = buildLabelBlock()
+  if (labelBlock) effectiveSystemPrompt += `\n\n---\n\n${labelBlock}`
   const userId = normUser(rawUserId)
   if (!userId) { res.status(400).json({ error: 'userId required' }); return }
   // Allow empty message when attachments are present (user can send "just an image").

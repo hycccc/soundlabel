@@ -12,7 +12,7 @@
 // When something fires, write a small JSON payload to
 // /srv/oncall-memory/sandbox/proactive-queue.json. Frontend polls this
 // (or socket pushes — TODO: wire to broadcast() too). For now, a polling
-// frontend component (XiaoqianNudges) reads + drops in toast queue, max
+// frontend nudge component reads + drops in toast queue, max
 // 3/day per device.
 //
 // Daily cap is enforced on the frontend (per-device localStorage). This

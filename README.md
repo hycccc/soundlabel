@@ -127,6 +127,18 @@ cd ops && npm ci && npm start        # boots without an API key; /health tells y
 
 It is deliberately framework-agnostic — point it at any working directory and give it a persona ([`ops/persona/`](ops/persona)). The patterns are documented in [`ops/README.md`](ops/README.md).
 
+**Wired to the label (M7):** set `SOUNDLABEL_WORKSPACE` (docker compose does) and the sidecar reads the workspace directly — every chat turn's system prompt carries the roster, catalog stats, and recent batches, and `POST /label/review {"batchId": ...}` reviews a batch from its manifest and writes `batches/<id>/ops-review.json`, which `soundlabel batches` displays:
+
+```
+$ soundlabel batches
+batch_c781e7af  released  june-holiday  mock
+    ops[heuristic]: released — rank 6.09/10 (full), critic accepted
+      - brief: an apology that arrived too late (pop)
+      → queue for a listening-room session before promo
+```
+
+The two processes share no database — Python exports `state.json`, Node writes reviews back, and the files are the API. Reviews are deterministic-heuristic by default; `{"llm": true}` upgrades to a model-written review with the same shape (and falls back to the heuristic if the call fails). Same free-by-default/opt-in-spend split as `--llm` and `--allow-paid`.
+
 ## Deploy (M5)
 
 ```bash
@@ -148,6 +160,7 @@ One box, one volume (`label-data` holds the catalog and batches), one human. `AN
 - [x] **M5** — single-operator deployment recipe (Dockerfile + docker compose, one box, one human)
 - [x] **M2** — listening room: LiveKit room orchestration, role-split tokens, synced playback + live scoring reference client
 - [x] **M6** — consolidation: the scoring stack (formerly [songscore](https://github.com/hycccc/songscore)) built into core as `soundlabel.scoring`; the oncall sidecar (formerly [claude-oncall](https://github.com/hycccc/claude-oncall)) merged as `ops/`
+- [x] **M7** — label↔ops wiring: the sidecar reads the workspace (`state.json` in every system prompt, `GET /label/state`) and writes batch reviews back (`POST /label/review` → `ops-review.json` → `soundlabel batches`); file contract, no shared database
 
 ## Status
 

@@ -2,7 +2,7 @@
 // 24h" and write a reflection note. Output lands in
 // /srv/oncall-memory/sandbox/reflections/auto-YYYY-MM-DD-HH.md and, if
 // anything actionable surfaces, gets enqueued onto the proactive-queue
-// so the frontend XiaoqianNudges picks it up.
+// so the frontend nudge feed picks it up.
 //
 // This is the "thinking partner that doesn't sleep" piece — even if the
 // user doesn't open the app, when they DO open it the daily brief +

@@ -15,6 +15,7 @@ from pathlib import Path
 from . import __version__
 from .catalog import Artist, Catalog
 from .pipeline import PaidBackendRefused, run_batch
+from .state import export_state, read_review
 
 
 def _workspace(args) -> Path:
@@ -28,6 +29,7 @@ def cmd_init(args) -> None:
     ws = Path(args.workspace)
     Catalog(ws / "catalog.db").close()
     (ws / "batches").mkdir(parents=True, exist_ok=True)
+    export_state(ws)
     print(f"label workspace ready at {ws.resolve()}")
 
 
@@ -95,6 +97,24 @@ def cmd_catalog(args) -> None:
     for r in rows:
         print(f"{r['id']}  {r['score']:>5.2f}  {r['artist_slug']:12s}  {r['title']}")
     catalog.close()
+
+
+def cmd_batches(args) -> None:
+    ws = _workspace(args)
+    catalog = Catalog(ws / "catalog.db")
+    rows = catalog.batches(limit=args.limit)
+    catalog.close()
+    if not rows:
+        print("no batches yet")
+    for r in rows:
+        print(f"{r['id']}  {r['status']:8s}  {r['artist_slug']:12s}  {r['backend']}")
+        review = read_review(ws, r["id"])
+        if review:
+            print(f"    ops[{review.get('source', '?')}]: {review.get('headline', '')}")
+            for note in review.get("notes", []):
+                print(f"      - {note}")
+            if review.get("action"):
+                print(f"      → {review['action']}")
 
 
 def cmd_room(args) -> None:
@@ -176,6 +196,10 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("catalog", help="list released tracks")
 
+    batchesp = sub.add_parser("batches",
+                              help="list production batches (with ops reviews if present)")
+    batchesp.add_argument("--limit", type=int, default=10)
+
     scorep = sub.add_parser("score", help="score one audio file with the full stack")
     scorep.add_argument("audio", help="audio file to score")
     scorep.add_argument("--lyrics", help="lyrics text file")
@@ -203,8 +227,8 @@ def main(argv: list[str] | None = None) -> None:
 
     args = p.parse_args(argv)
     {"init": cmd_init, "roster": cmd_roster, "produce": cmd_produce,
-     "catalog": cmd_catalog, "score": cmd_score, "room": cmd_room,
-     "demo": cmd_demo}[args.cmd](args)
+     "catalog": cmd_catalog, "batches": cmd_batches, "score": cmd_score,
+     "room": cmd_room, "demo": cmd_demo}[args.cmd](args)
 
 
 if __name__ == "__main__":

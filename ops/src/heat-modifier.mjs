@@ -1,6 +1,6 @@
 // heat-modifier — turns a 0-100 "heat" dial into a tone-modifying
 // system-prompt suffix. The dial is set client-side (localStorage) and
-// passed via X-Xiaoqian-Heat header. Out-of-range values clamp to 50.
+// passed via X-Ops-Heat header. Out-of-range values clamp to 50.
 //
 // Tone bands:
 //   0-19   ice — pure facts, no editorial, like git log lines
