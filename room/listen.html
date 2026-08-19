@@ -38,12 +38,16 @@
 
 <fieldset id="host-panel" class="hidden">
   <legend>host — play a candidate to the room</legend>
-  <input id="file" type="file" accept="audio/*">
+  <label>track id (from: soundlabel room queue)</label>
+  <input id="trackId" type="text" placeholder="trk_…">
+  <input id="file" type="file" accept="audio/*" style="margin-top:8px">
   <audio id="player" controls style="width:100%; margin-top:8px"></audio>
+  <button id="export" class="alt" disabled>export session JSON</button>
+  <span id="scoreCount" style="color:#8a877f; font-size:12px"></span>
 </fieldset>
 
 <fieldset id="listener-panel" class="hidden">
-  <legend>score the current track</legend>
+  <legend>score the current track — <span id="nowPlaying">nothing playing yet</span></legend>
   <div class="scores" id="scores"></div>
   <label>comment (optional)</label><input id="comment" type="text">
 </fieldset>
@@ -54,6 +58,27 @@
 const $ = (id) => document.getElementById(id);
 const log = (m) => { $("log").textContent += m + "\n"; $("log").scrollTop = 1e9; };
 let room, isHost = false;
+let currentTrackId = "";       // listeners: set by the host's play messages
+const sessionScores = [];      // host: everything received, for the export
+
+const send = (msg) =>
+  room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(msg)),
+                                    { reliable: true, topic: "soundlabel" });
+
+// The session export is what `soundlabel room ingest` reads back into the
+// catalog (schema: rooms.SESSION_FORMAT). The room is a transport; the
+// catalog stays the source of truth.
+function exportSession() {
+  const blob = new Blob(
+    [JSON.stringify({ room: room.name, exported_at: Date.now() / 1000,
+                      scores: sessionScores }, null, 2)],
+    { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `session-${room.name}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 $("join").onclick = async () => {
   const { Room, RoomEvent, LocalAudioTrack } = LivekitClient;
@@ -72,8 +97,21 @@ $("join").onclick = async () => {
   });
   room.on(RoomEvent.DataReceived, (payload, participant) => {
     const msg = JSON.parse(new TextDecoder().decode(payload));
-    if (msg.type === "score") log(`score from ${participant?.identity}: ${msg.score}/10 ${msg.comment || ""}`);
-    else log(`${msg.type} from ${participant?.identity}`);
+    if (msg.type === "score") {
+      log(`score from ${participant?.identity}: ${msg.score}/10 on ${msg.track_id || "?"} ${msg.comment || ""}`);
+      if (isHost) {
+        sessionScores.push({ track_id: msg.track_id || $("trackId").value.trim(),
+                             identity: msg.identity || participant?.identity || "anon",
+                             score: msg.score, comment: msg.comment || "",
+                             at_unix: Date.now() / 1000 });
+        $("export").disabled = false;
+        $("scoreCount").textContent = `${sessionScores.length} score(s) collected`;
+      }
+    } else if (msg.type === "play") {
+      currentTrackId = msg.track_id || "";
+      if (!isHost) $("nowPlaying").textContent = currentTrackId || "untitled track";
+      log(`${msg.type} ${msg.track_id || ""} from ${participant?.identity}`);
+    } else log(`${msg.type} from ${participant?.identity}`);
   });
 
   if (isHost) {
@@ -85,18 +123,19 @@ $("join").onclick = async () => {
       const stream = player.captureStream ? player.captureStream() : player.mozCaptureStream();
       const [audioTrack] = stream.getAudioTracks();
       await room.localParticipant.publishTrack(new LocalAudioTrack(audioTrack));
+      send({ type: "play", track_id: $("trackId").value.trim(),
+             position_s: 0, at_unix: Date.now() / 1000 });
       log("publishing to the room — everyone hears the same playhead");
     };
+    $("export").onclick = exportSession;
   } else {
     for (let i = 1; i <= 10; i++) {
       const b = document.createElement("button");
       b.textContent = i;
       b.onclick = () => {
-        const msg = { type: "score", score: i, comment: $("comment").value,
-                      identity: room.localParticipant.identity };
-        room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(msg)),
-                                          { reliable: true, topic: "soundlabel" });
-        log(`sent ${i}/10`);
+        send({ type: "score", track_id: currentTrackId, score: i,
+               comment: $("comment").value, identity: room.localParticipant.identity });
+        log(`sent ${i}/10 on ${currentTrackId || "?"}`);
         $("comment").value = "";
       };
       $("scores").appendChild(b);

@@ -44,7 +44,8 @@ export function buildLabelBlock() {
     lines.push('## Catalog')
     lines.push(`- released tracks: ${t.count}${t.avg_score != null ? `, avg score ${t.avg_score}` : ''}`)
     for (const r of t.recent ?? []) {
-      lines.push(`- ${r.id} ${r.score} ${r.artist} — ${r.title}`)
+      const room = r.room ? ` (room ${r.room.avg}×${r.room.n})` : ''
+      lines.push(`- ${r.id} ${r.score} ${r.artist} — ${r.title}${room}`)
     }
     lines.push('')
   }

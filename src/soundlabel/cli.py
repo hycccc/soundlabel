@@ -92,10 +92,13 @@ def cmd_score(args) -> None:
 def cmd_catalog(args) -> None:
     catalog = Catalog(_workspace(args) / "catalog.db")
     rows = catalog.tracks()
+    reception = catalog.room_reception()
     if not rows:
         print("catalog is empty")
     for r in rows:
-        print(f"{r['id']}  {r['score']:>5.2f}  {r['artist_slug']:12s}  {r['title']}")
+        rec = reception.get(r["id"])
+        extra = f"  room {rec['avg']}×{rec['n']}" if rec else ""
+        print(f"{r['id']}  {r['score']:>5.2f}  {r['artist_slug']:12s}  {r['title']}{extra}")
     catalog.close()
 
 
@@ -119,6 +122,48 @@ def cmd_batches(args) -> None:
 
 def cmd_room(args) -> None:
     import asyncio
+
+    # queue and ingest are catalog-side and fully offline — no LiveKit,
+    # no env, no extras needed.
+    if args.room_cmd == "queue":
+        from .rooms import pick_queue
+        ws = _workspace(args)
+        catalog = Catalog(ws / "catalog.db")
+        rows = pick_queue(catalog, args.limit)
+        reception = catalog.room_reception()
+        catalog.close()
+        if not rows:
+            print("no released tracks to audition — produce something first")
+        for r in rows:
+            rec = reception.get(r["id"])
+            tag = f"heard {rec['avg']}×{rec['n']}" if rec else "unheard"
+            print(f"{r['id']}  {r['score']:>5.2f}  [{tag}]  {r['artist_slug']:12s}  {r['title']}")
+            print(f"    audio: {r['audio_path']}")
+        return
+    if args.room_cmd == "ingest":
+        from .rooms import ingest_session
+        ws = _workspace(args)
+        try:
+            session = json.loads(Path(args.session).read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            sys.exit(f"cannot read session file: {exc}")
+        catalog = Catalog(ws / "catalog.db")
+        result = ingest_session(catalog, session)
+        reception = catalog.room_reception()
+        tracks = {r["id"]: r for r in catalog.tracks()}
+        catalog.close()
+        export_state(ws)  # ops sees the new reception immediately
+        print(f"ingested {result['ingested']} score(s) from room "
+              f"{session.get('room', 'room')!r}")
+        for tid in dict.fromkeys(s.get("track_id") for s in session.get("scores", [])):
+            if tid in reception and tid in tracks:
+                rec = reception[tid]
+                print(f"  {tid}  room {rec['avg']}×{rec['n']}  {tracks[tid]['title']}")
+        if result["skipped"]:
+            print(f"  skipped {len(result['skipped'])} score(s) for unknown tracks: "
+                  + ", ".join(str(t) for t in result["skipped"]))
+        return
+
     try:
         from . import rooms
         config = rooms.RoomConfig.from_env()
@@ -211,6 +256,12 @@ def main(argv: list[str] | None = None) -> None:
 
     roomp = sub.add_parser("room", help="listening rooms (LiveKit)")
     rsub2 = roomp.add_subparsers(dest="room_cmd", required=True)
+    rqueue = rsub2.add_parser("queue",
+                              help="pick session candidates from the catalog (offline)")
+    rqueue.add_argument("--limit", type=int, default=5)
+    ringest = rsub2.add_parser("ingest",
+                               help="write a session's exported scores into the catalog (offline)")
+    ringest.add_argument("session", help="session JSON exported by the host client")
     rtoken = rsub2.add_parser("token", help="mint a join token (offline)")
     rtoken.add_argument("room")
     rtoken.add_argument("identity")

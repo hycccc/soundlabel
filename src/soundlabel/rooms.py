@@ -36,6 +36,47 @@ PROTOCOL = {
               "score": 7, "comment": ""},
 }
 
+# What the host client exports after a session ("Export session" in
+# room/listen.html) and what ``soundlabel room ingest`` reads back into the
+# catalog. The room is a transport; the catalog stays the source of truth.
+SESSION_FORMAT = {
+    "room": "release-night",
+    "exported_at": 0.0,
+    "scores": [PROTOCOL["score"]],
+}
+
+
+def pick_queue(catalog, limit: int = 5) -> list:
+    """Choose what a room session should audition, from the catalog.
+
+    Released tracks only; tracks no room has heard yet come first (newest
+    first within each group). The point of a session is fresh human signal,
+    not replaying the back catalog.
+    """
+    heard = catalog.room_reception()
+    released = [r for r in catalog.tracks() if r["verdict"] == "accept"]
+    return sorted(released, key=lambda r: (r["id"] in heard, -r["created_at"]))[:limit]
+
+
+def ingest_session(catalog, session: dict) -> dict:
+    """Write a session export's scores into the catalog.
+
+    Returns ``{"ingested": n, "skipped": [track_id, ...]}`` — scores for
+    tracks the catalog doesn't know are skipped and reported, never
+    silently dropped.
+    """
+    room = str(session.get("room") or "room")
+    ingested, skipped = 0, []
+    for s in session.get("scores", []):
+        try:
+            catalog.add_room_score(s["track_id"], room,
+                                   str(s.get("identity") or "anon"),
+                                   float(s["score"]), str(s.get("comment") or ""))
+            ingested += 1
+        except (KeyError, TypeError, ValueError):
+            skipped.append(s.get("track_id") if isinstance(s, dict) else None)
+    return {"ingested": ingested, "skipped": skipped}
+
 
 @dataclass
 class RoomConfig:

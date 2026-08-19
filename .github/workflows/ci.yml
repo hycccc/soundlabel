@@ -29,6 +29,14 @@ jobs:
         run: |
           f=$(find /tmp/demo-label/batches -name "*.wav" | head -1)
           soundlabel score "$f" --json | python -c "import json,sys; r=json.load(sys.stdin); assert r['gate'] and 'composite' in r"
+      - name: smoke-test the room feedback loop (offline)
+        run: |
+          soundlabel -w /tmp/demo-label room queue | grep -F '[unheard]'
+          tid=$(python -c "import json; print(json.load(open('/tmp/demo-label/state.json'))['tracks']['recent'][0]['id'])")
+          printf '{"room":"ci-night","scores":[{"track_id":"%s","identity":"ci","score":8}]}' "$tid" > /tmp/session.json
+          soundlabel -w /tmp/demo-label room ingest /tmp/session.json
+          soundlabel -w /tmp/demo-label catalog | grep -F 'room 8.0×1'
+          python -c "import json; t=json.load(open('/tmp/demo-label/state.json'))['tracks']['recent'][0]; assert t['room'] == {'avg': 8.0, 'n': 1}"
 
   ops:
     runs-on: ubuntu-latest

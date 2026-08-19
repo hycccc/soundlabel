@@ -32,6 +32,7 @@ def export_state(workspace: str | Path) -> Path:
     catalog = Catalog(workspace / "catalog.db")
     tracks = catalog.tracks()
     scores = [r["score"] for r in tracks]
+    reception = catalog.room_reception()
     state = {
         "version": STATE_VERSION,
         "updated_at": time.time(),
@@ -41,7 +42,8 @@ def export_state(workspace: str | Path) -> Path:
             "avg_score": round(sum(scores) / len(scores), 3) if scores else None,
             "recent": [
                 {"id": r["id"], "title": r["title"], "artist": r["artist_slug"],
-                 "score": r["score"], "verdict": r["verdict"]}
+                 "score": r["score"], "verdict": r["verdict"],
+                 "room": reception.get(r["id"])}
                 for r in tracks[-5:][::-1]
             ],
         },

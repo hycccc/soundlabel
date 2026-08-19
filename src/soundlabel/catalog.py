@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS tracks (
     score_json TEXT NOT NULL DEFAULT '{}',
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS room_scores (
+    track_id TEXT NOT NULL REFERENCES tracks(id),
+    room TEXT NOT NULL,
+    listener TEXT NOT NULL,
+    score REAL NOT NULL,
+    comment TEXT DEFAULT '',
+    created_at REAL NOT NULL,
+    PRIMARY KEY (track_id, room, listener)
+);
 """
 
 
@@ -142,6 +151,30 @@ class Catalog:
             ).fetchall()
         return self._conn.execute("SELECT * FROM tracks ORDER BY created_at").fetchall()
 
+    # -- room scores ------------------------------------------------------
+    def add_room_score(self, track_id: str, room: str, listener: str,
+                       score: float, comment: str = "") -> None:
+        """Record one listener's room score. Re-scoring the same track in the
+        same room overwrites (last listen wins) — a listener changing their
+        mind is signal, padding the count is not."""
+        if self._conn.execute("SELECT 1 FROM tracks WHERE id=?", (track_id,)).fetchone() is None:
+            raise KeyError(f"track {track_id!r} not in the catalog")
+        self._conn.execute(
+            "INSERT OR REPLACE INTO room_scores VALUES (?,?,?,?,?,?)",
+            (track_id, room, listener, float(score), comment, time.time()),
+        )
+        self._conn.commit()
+
+    def room_reception(self, track_id: str | None = None) -> dict[str, dict]:
+        """Aggregate human reception per track: {track_id: {avg, n}}."""
+        sql = "SELECT track_id, AVG(score) AS avg, COUNT(*) AS n FROM room_scores"
+        params: tuple = ()
+        if track_id:
+            sql += " WHERE track_id=?"
+            params = (track_id,)
+        rows = self._conn.execute(sql + " GROUP BY track_id", params).fetchall()
+        return {r["track_id"]: {"avg": round(r["avg"], 2), "n": r["n"]} for r in rows}
+
     def history(self, artist_slug: str) -> dict:
         """What the A&R agent reads: style distribution + recent verdicts."""
         rows = self.tracks(artist_slug)
@@ -150,7 +183,11 @@ class Catalog:
         for r in rows:
             for tag in json.loads(r["score_json"]).get("style_tags", []):
                 styles[tag] = styles.get(tag, 0) + 1
-        return {"n_tracks": len(rows), "style_counts": styles, "recent_verdicts": verdicts[-5:]}
+        reception = self.room_reception()
+        return {"n_tracks": len(rows), "style_counts": styles,
+                "recent_verdicts": verdicts[-5:],
+                "room_reception": {r["id"]: reception[r["id"]]
+                                   for r in rows if r["id"] in reception}}
 
     def close(self) -> None:
         self._conn.close()
